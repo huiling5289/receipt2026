@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>收款證明產生器(一式兩聯)</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+            background-color: #eef2f7;
+            margin: 0;
+            padding: 30px;
+            font-size: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .generator-form {
+            background-color: #ffffff;
+            padding: 30px 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 840px;
+            margin-bottom: 30px;
+        }
+
+        .generator-form h1 {
+            text-align: center;
+            color: #1a3b5d;
+            margin-bottom: 20px;
+            font-weight: 700;
+            font-size: 24px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            margin-bottom: 8px;
+            color: #4f6a8a;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            padding: 10px;
+            border: 1px solid #cedbe5;
+            border-radius: 5px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+
+        .form-buttons {
+            text-align: center;
+            margin-top:30px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn-generate { background-color: #3498db; color: white; }
+        .btn-generate:hover { background-color: #2980b9; }
+        .btn-print { background-color: #2ecc71; color: white; display: none; margin-left: 10px; }
+        .btn-print:hover { background-color: #27ae60; }
+
+        #receipt-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            align-items: center;
+        }
+
+        #receipt-container:empty {
+            display: none;
+        }
+
+        .a4-page {
+            width: 210mm;
+            min-height: 297mm;
+            background: white;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            padding: 0.5cm;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: repeat(2, minmax(13cm, auto));
+            gap: 1.2cm 5mm;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            position: relative; /* Keep this for the internal dashed-line-separator */
+        }
+        
+        .a4-page + .a4-page {
+            page-break-before: always;
+        }
+
+        .receipt-unit {
+            width: 100%;
+            height: 13cm;
+            border: 1px solid #333;
+            box-sizing: border-box;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            padding: 5px;
+            position: relative;
+        }
+
+        .receipt-top-area {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 5px;
+            position: relative;
+            padding-left: 5px;
+        }
+
+        .receipt-address-info {
+            font-size: 11px;
+            line-height: 1.4;
+            margin-bottom: 5px;
+        }
+
+        .receipt-main-title-block,
+        .receipt-sub-title-block {
+            text-align: center;
+            margin-bottom: 5px;
+            line-height: 1.3;
+        }
+        .receipt-main-title-block span {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .receipt-sub-title-block span {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .receipt-copy-no-info {
+            position: absolute;
+            top: 108px;
+            right: 5px;
+            text-align: right;
+            line-height: 1.4;
+            font-size: 13px;
+        }
+
+        .receipt-row {
+            display: flex;
+            align-items: flex-start;
+            padding: 2px 5px;
+            min-height: 1.5em;
+            box-sizing: border-box;
+        }
+
+        .receipt-row.content-row {
+            flex-grow: 1;
+            min-height: 3em;
+        }
+
+        .receipt-row.blank-line {
+            min-height: 1.5em;
+        }
+
+        .receipt-content-label {
+            flex-shrink: 0;
+            margin-right: 5px;
+        }
+
+        .receipt-content-value {
+            white-space: pre-wrap;
+            word-break: break-all;
+            flex-grow: 1;
+        }
+        
+        .receipt-content-value.small-font {
+            font-size: 12px;
+        }
+
+        /* Style for the explicitly added dashed line */
+        .dashed-line-separator {
+            position: absolute;
+            top: 50%; /* Center the dashed line between two receipts */
+            left: 0;
+            right: 0;
+            height: 1px;
+            border-top: 1px dashed #aaa; /* Dashed line style */
+            pointer-events: none; /* Prevent interaction */
+            z-index: 10; /* Ensure it is above content */
+            display: block; /* Ensure it is visible */
+        }
+
+        /* 新增的樣式，讓 checkbox 和 label 在同一行 */
+        .form-group.checkbox-group {
+            flex-direction: row; /* 讓內容水平排列 */
+            align-items: center; /* 垂直置中 */
+        }
+
+        .form-group.checkbox-group label {
+            margin-bottom: 0; /* 移除底部間距 */
+            margin-left: 8px; /* 在 checkbox 和 label 之間添加間距 */
+        }
+
+
+        @media print {
+            body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; }
+            #receipt-container { 
+                margin: 0; 
+                padding: 0; 
+                display: block;
+            }
+            .generator-form, .btn { display: none; }
+
+            .a4-page { 
+                border: none; 
+                box-shadow: none; 
+                margin: 0; 
+                height: 297mm;
+                padding: 1cm; /* Adjusted padding to 1cm for consistency */
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: repeat(2, 13cm); 
+                gap: 1.5cm 1cm; 
+                page-break-after: always;
+                overflow: hidden;
+                position: relative;
+            }
+            .a4-page::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                left: 50%; /* 中間分隔線 */
+                width: 0;
+                border-left: 1px dashed #aaa; /* 虛線樣式 */
+                z-index: 1; /* 確保在內容之上 */
+                pointer-events: none; /* 防止干擾點擊或選擇 */
+            }
+
+            .a4-page:last-of-type {
+                page-break-after: auto;
+            }
+
+            .receipt-unit {
+                page-break-inside: avoid;
+                height: 13cm;
+            }
+
+            /* Ensure dashed line is visible in print mode */
+            .dashed-line-separator {
+                display: block; 
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="generator-form">
+        <h1>收款證明產生器(一式兩聯)</h1>
+        <form id="receiptForm">
+            <div class="form-group">
+                <label for="receiptHeader">收據抬頭:</label>
+                <select id="receiptHeader">
+                    <option value="屏基醫療財團法人">屏基醫療財團法人</option>
+                    <option value="屏基醫療財團法人屏東基督教醫院" selected>屏基醫療財團法人屏東基督教醫院</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="date">日期:</label>
+                <input type="date" id="date" required>
+                <div class="checkbox-group"> <!-- 使用新的 class 讓 checkbox 和 label 在同一行 -->
+                    <input type="checkbox" id="disableDate" />
+                    <label for="disableDate">是否禁用日期</label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="content">事由/內容:</label>
+                <textarea id="content" rows="3" maxlength="300" style="resize:vertical;"
+                required>三地門【慢·漫來】部落市集 周邊小物
+□造型隨身碟350元/件ˍˍˍˍˍˍˍˍˍˍ件
+□麻布提袋350元/件ˍˍˍˍˍˍˍˍˍˍˍˍ件
+□帆布背袋350元/件ˍˍˍˍˍˍˍˍˍˍˍˍ件
+□紀念排汗T恤300元/件ˍˍˍˍˍˍˍˍˍ件
+□飲料提袋100元/個ˍˍˍˍˍˍˍˍˍˍˍˍ個</textarea>
+            </div>
+            <div class="form-group">
+                <label for="amount">金額：</label>
+                <input type="number" id="amount" placeholder="請輸入金額,留空則不顯示" min="0" step="0.01">
+            </div>
+            <div class="form-group">
+                <label for="startSerial">起始編號:</label>
+                <input type="text" id="startSerial" value="屏基2025A299-001" required>
+            </div>
+            <div class="form-group">
+                <label for="quantity">產生組數 (每組含存根聯/收執聯):</label>
+                <input type="number" id="quantity" value="2" min="1" max="100" required>
+            </div>
+            <div class="form-group checkbox-group"> <!-- 使用新的 class 讓 checkbox 和 label 在同一行 -->
+                <input type="checkbox" id="includeDirector" />
+                <label for="includeDirector">包含院長簽名欄位 (若不勾選則只顯示經手人)</label>
+            </div>
+            <div class="form-buttons">
+                <button type="submit" class="btn btn-generate">產生證明</button>
+                <button type="button" id="printButton" class="btn btn-print">列印</button>
+            </div>
+        </form>
+    </div>
+    <div id="receipt-container"></div>
+
+    <script>
+        const form = document.getElementById('receiptForm');
+        const dateInput = document.getElementById('date');
+        const disableDateCheckbox = document.getElementById('disableDate');
+        const container = document.getElementById('receipt-container');
+        const printButton = document.getElementById('printButton');
+        const includeDirectorCheckbox = document.getElementById('includeDirector');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            dateInput.value = `${year}-${month}-${day}`;
+
+            disableDateCheckbox.addEventListener('change', () => {
+                dateInput.disabled = disableDateCheckbox.checked;
+            });
+        });
+
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            container.innerHTML = '';
+            
+            const receiptHeader = document.getElementById('receiptHeader').value;
+            const date = dateInput.disabled ? '' : dateInput.value;
+            const content = document.getElementById('content').value;
+            const amount = document.getElementById('amount').value;
+            const formattedAmount = amount ? `NT$${amount} 元整` : ''; 
+            const includeDirector = includeDirectorCheckbox.checked;
+
+            const startSerial = document.getElementById('startSerial').value;
+            const quantity = parseInt(document.getElementById('quantity').value, 10);
+
+            const allReceipts = []; 
+
+            for (let i = 0; i < quantity; i++) {
+                const currentSerial = startSerial.replace(/(\d+)$/, match => {
+                    return String(parseInt(match, 10) + i).padStart(match.length, '0');
+                });
+                
+                allReceipts.push(createReceiptHTML(currentSerial, '存根聯', date, content, formattedAmount, receiptHeader, amount, includeDirector)); 
+                allReceipts.push(createReceiptHTML(currentSerial, '收執聯', date, content, formattedAmount, receiptHeader, amount, includeDirector));
+            }
+
+            const receiptsPerPage = 4; 
+            let currentReceiptIndex = 0;
+
+            while (currentReceiptIndex < allReceipts.length) {
+                const currentPage = document.createElement('div');
+                currentPage.className = 'a4-page';
+
+                // Add the dashed line separator div directly
+                const dashedLine = document.createElement('div');
+                dashedLine.className = 'dashed-line-separator';
+                currentPage.appendChild(dashedLine);
+
+                // Add receipts to the current page
+                for (let j = 0; j < receiptsPerPage; j++) {
+                    if (currentReceiptIndex + j < allReceipts.length) {
+                        currentPage.innerHTML += allReceipts[currentReceiptIndex + j];
+                    }
+                }
+
+                container.appendChild(currentPage);
+                currentReceiptIndex += receiptsPerPage; 
+            }
+
+            printButton.style.display = 'inline-block';
+        });
+
+        function createReceiptHTML(serial, copyType, date, content, formattedAmount, receiptHeader, amountValue, includeDirector) {
+            const contentLines = content.split('\n');
+            const formattedContent = contentLines.map(line => line.replace(/^ +/g, match => '&nbsp;'.repeat(match.length))).join('<br>');
+            const isThreeLinesOrMore = contentLines.filter(line => line.trim() !== '').length >= 3;
+
+            const dateDisplay = date ? `日期：${date}` : `日期：                 `;
+
+            let amountHtml;
+            if (amountValue) {
+                amountHtml = `<span style="border-bottom: 1px solid black; padding-bottom: 2px; min-width: 100px; display: inline-block;">${formattedAmount}</span>`;
+            } else {
+                amountHtml = `<span style="border-bottom: 1px solid black; padding-bottom: 2px; min-width: 100px; display: inline-block;">&nbsp;</span><span>元</span>`;
+            }
+
+            let directorSignatures = '';
+            // 判斷是否顯示院長簽名欄位
+            if (includeDirector) {
+                directorSignatures = `<span class="receipt-content-label" style="margin-right: 120px;">院長:</span>`;
+            }
+
+            return `
+                <div class="receipt-unit">
+                    <div class="receipt-top-area">
+                        <div class="receipt-address-info">
+                            <span>地址：90059 屏東市大連路 60 號</span><br>
+                            <span>統一編號：91110012</span><br>
+                            <span>電話：(08)7368686</span>
+                        </div>
+                        <div class="receipt-main-title-block"><span>${receiptHeader}</span></div>
+                        <div class="receipt-sub-title-block"><span>收款證明</span></div>
+                        
+                        <div class="receipt-copy-no-info">
+                            <span>${copyType}</span><br>
+                            <span>NO: ${serial}</span>
+                        </div>
+                    </div>
+                          <br> <!-- 新增空白行 -->
+
+                    <div class="receipt-row" style="margin-top: 24px;">
+                        <span class="receipt-content-label">茲收到</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span class="receipt-content-label">${dateDisplay}</span>
+                    </div>
+                    <div class="receipt-row content-row">
+                        <span class="receipt-content-label">事由：</span>
+                        <span class="receipt-content-value ${isThreeLinesOrMore ? 'small-font' : ''}">${formattedContent}</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span class="receipt-content-label">金額：</span>
+                        ${amountHtml}
+                    </div>
+                    <br>
+                    <div class="receipt-row blank-line"></div>
+                    <div class="receipt-row">
+                        ${directorSignatures}
+                        <span class="receipt-content-label">經手人：</span>
+                        <span style=" padding-bottom: 2px; min-width: 60px; display: inline-block;">&nbsp;</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        printButton.addEventListener('click', () => window.print());
+    </script>
+</body>
+</html>
